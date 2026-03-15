@@ -36,6 +36,15 @@ on:
         required: false
         type: boolean
         default: true
+      upload-coverage:
+        description: 'Upload JaCoCo coverage reports to Codecov'
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      CODECOV_TOKEN:
+        description: 'Codecov token for coverage upload (required when upload-coverage is true)'
+        required: false
 
 jobs:
   check-changes:
@@ -127,6 +136,15 @@ jobs:
         if: inputs.run-bukkit
         working-directory: bukkit
         run: ./gradlew test --no-daemon
+      - name: Upload coverage to Codecov
+        if: inputs.upload-coverage
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de  # v5
+        with:
+          files: |
+            **/build/reports/jacoco/test/jacocoTestReport.xml
+            **/build/reports/jacoco/jacocoTestReport.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
       - name: Upload test results on failure
         if: failure()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
