@@ -684,7 +684,7 @@ jobs:
           git checkout $PROD_BRANCH
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@b25b93d384199fc0fc8c2e126b2d937a0cbeb2ae  # v2
+        uses: softprops/action-gh-release@26e8ad27a09a225049a7075d7ec1caa2df6ff332  # v2.6.0
         with:
           tag_name: v${{ needs.check-changes.outputs.new_version }}
           name: "${{ needs.check-changes.outputs.is_production == 'true' && '🚀' || '🔧' }} ${{ inputs.mod-name }} v${{ needs.check-changes.outputs.new_version }}"
