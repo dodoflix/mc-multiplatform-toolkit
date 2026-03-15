@@ -98,14 +98,16 @@ jobs:
 
       - name: Check for plugin file changes
         id: changes
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          if [[ "${{ github.event.head_commit.message }}" == *"[skip ci]"* ]]; then
+          if [[ "$COMMIT_MSG" == *"[skip ci]"* ]]; then
             echo "⏭️ Skipping due to [skip ci]"
             echo "should_deploy=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if [[ "${{ github.event.head_commit.message }}" == *"[force deploy]"* ]]; then
+          if [[ "$COMMIT_MSG" == *"[force deploy]"* ]]; then
             echo "✅ Force deploy requested"
             echo "should_deploy=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -173,7 +175,7 @@ jobs:
           if [ -z "$LAST_TAG" ]; then
             COMMITS=$(git log --pretty=format:"%s" --no-merges)
           else
-            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" --no-merges)
+            COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s" --no-merges)
           fi
 
           BUMP_TYPE="patch"
@@ -344,7 +346,7 @@ jobs:
           cd test-server
           java -Xmx1G -jar paper.jar --nogui &
           SERVER_PID=$!
-          for i in {1..90}; do
+          for _ in {1..90}; do
             if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null; exit 1; fi
             sleep 1
@@ -389,7 +391,7 @@ jobs:
           mkdir -p test-server/mods
           MC_VERSION=$(grep -E '^minecraft = "[0-9]' gradle/libs.versions.toml | cut -d'"' -f2)
           curl -o fabric-installer.jar "https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.0.1/fabric-installer-1.0.1.jar"
-          java -jar fabric-installer.jar server -mcversion $MC_VERSION -dir test-server -downloadMinecraft
+          java -jar fabric-installer.jar server -mcversion "$MC_VERSION" -dir test-server -downloadMinecraft
           FABRIC_API_URL=$(curl -s "https://api.modrinth.com/v2/project/fabric-api/version?game_versions=%5B%22${MC_VERSION}%22%5D&loaders=%5B%22fabric%22%5D" | jq -r '.[0].files[0].url')
           if [ -n "$FABRIC_API_URL" ] && [ "$FABRIC_API_URL" != "null" ]; then
             curl -L -o test-server/mods/fabric-api.jar "$FABRIC_API_URL"
@@ -406,7 +408,7 @@ jobs:
           cd test-server
           java -Xmx1G -jar fabric-server-launch.jar --nogui &
           SERVER_PID=$!
-          for i in {1..90}; do
+          for _ in {1..90}; do
             if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null; exit 1; fi
             sleep 1
@@ -483,7 +485,7 @@ jobs:
             fi
           fi
           SERVER_PID=$!
-          for i in {1..150}; do
+          for _ in {1..150}; do
             if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null || cat logs/debug.log 2>/dev/null; exit 1; fi
             sleep 1
@@ -552,7 +554,7 @@ jobs:
             java -Xmx2G @user_jvm_args.txt @libraries/net/neoforged/neoforge/*/unix_args.txt --nogui &
           fi
           SERVER_PID=$!
-          for i in {1..150}; do
+          for _ in {1..150}; do
             if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null; exit 1; fi
             sleep 1
@@ -593,7 +595,7 @@ jobs:
           if [ -z "$LAST_TAG" ]; then
             COMMITS=$(git log --pretty=format:"%s|%h" --no-merges -20)
           else
-            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s|%h" --no-merges)
+            COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s|%h" --no-merges)
           fi
 
           FEATURES=""; FIXES=""; OTHER=""
