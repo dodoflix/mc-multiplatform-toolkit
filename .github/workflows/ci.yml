@@ -563,7 +563,11 @@ jobs:
             echo "| NeoForge Build   | $(status "$RESULT_NEOFORGE") |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "workflow_dispatch" ] || ([ "$EVENT_NAME" = "push" ] && ([ "$GIT_REF" = "refs/heads/master" ] || [ "$GIT_REF" = "refs/heads/main" ] || [ "$GIT_REF" = "refs/heads/develop" ])); then
+          is_protected_push=false
+          if [ "$EVENT_NAME" = "push" ] && { [ "$GIT_REF" = "refs/heads/master" ] || [ "$GIT_REF" = "refs/heads/main" ] || [ "$GIT_REF" = "refs/heads/develop" ]; }; then
+            is_protected_push=true
+          fi
+          if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "workflow_dispatch" ] || [ "$is_protected_push" = "true" ]; then
             {
               echo ""
               echo "### Integration Tests"

@@ -2,7 +2,7 @@ name: Validate Workflows
 
 on:
   push:
-    branches: [develop, 'feature/**', 'fix/**', 'chore/**']
+    branches: [main, develop, 'feature/**', 'fix/**', 'chore/**']
   pull_request:
     branches: [develop, main]
 

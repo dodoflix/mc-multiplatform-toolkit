@@ -1,7 +1,9 @@
 name: Self CD
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Validate Workflows"]
+    types: [completed]
     branches: [main]
 
 permissions:
@@ -11,8 +13,7 @@ jobs:
   release:
     name: Compute Version & Release
     runs-on: ubuntu-latest
-    # Only run when the push is a PR merge or a direct commit (not a tag push)
-    if: "!startsWith(github.ref, 'refs/tags/')"
+    if: github.event.workflow_run.conclusion == 'success'
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
