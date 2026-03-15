@@ -1,0 +1,788 @@
+name: CD (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      mod-name:
+        description: 'Display name (PascalCase, e.g. DisableVillagerTrade) — used in artifact & release names'
+        required: true
+        type: string
+      mod-id:
+        description: 'Mod ID (lowercase, e.g. disablevillagertrade) — used in log grep patterns'
+        required: true
+        type: string
+      java-version:
+        description: 'Java version to compile with'
+        required: false
+        type: string
+        default: '21'
+      run-bukkit:
+        description: 'Build and release the Bukkit platform'
+        required: false
+        type: boolean
+        default: true
+      run-fabric:
+        description: 'Build and release the Fabric platform'
+        required: false
+        type: boolean
+        default: true
+      run-forge:
+        description: 'Build and release the Forge platform'
+        required: false
+        type: boolean
+        default: true
+      run-neoforge:
+        description: 'Build and release the NeoForge platform'
+        required: false
+        type: boolean
+        default: true
+      modrinth-project-id:
+        description: 'Modrinth project ID/slug (leave empty to skip Modrinth publishing)'
+        required: false
+        type: string
+        default: ''
+      bukkit-mc-versions:
+        description: 'Newline-separated list of Minecraft versions supported by the Bukkit build (for Modrinth)'
+        required: false
+        type: string
+        default: '1.21.11'
+      fabric-mc-versions:
+        description: 'Newline-separated list of Minecraft versions supported by the Fabric build (for Modrinth)'
+        required: false
+        type: string
+        default: '1.21.11'
+      forge-mc-versions:
+        description: 'Newline-separated list of Minecraft versions supported by the Forge build (for Modrinth)'
+        required: false
+        type: string
+        default: '1.21.11'
+      neoforge-mc-versions:
+        description: 'Newline-separated list of Minecraft versions supported by the NeoForge build (for Modrinth)'
+        required: false
+        type: string
+        default: '1.21.11'
+      production-branch:
+        description: 'Branch name that triggers production releases'
+        required: false
+        type: string
+        default: 'master'
+      develop-branch:
+        description: 'Branch name that triggers dev builds and receives version syncs after production release'
+        required: false
+        type: string
+        default: 'develop'
+      modrinth-description-path:
+        description: 'Path to the Modrinth project description markdown file'
+        required: false
+        type: string
+        default: '.modrinth/description.md'
+    secrets:
+      MODRINTH_TOKEN:
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  check-changes:
+    name: Check for Plugin Changes
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.changes.outputs.should_deploy }}
+      new_version:   ${{ steps.new_version.outputs.new_version }}
+      is_production: ${{ steps.release_type.outputs.is_production }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        with:
+          fetch-depth: 0
+
+      - name: Check for plugin file changes
+        id: changes
+        run: |
+          if [[ "${{ github.event.head_commit.message }}" == *"[skip ci]"* ]]; then
+            echo "⏭️ Skipping due to [skip ci]"
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [[ "${{ github.event.head_commit.message }}" == *"[force deploy]"* ]]; then
+            echo "✅ Force deploy requested"
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          SHOULD_DEPLOY="false"
+          while IFS= read -r file; do
+            if [[ "$file" == */src/main/java/* ]] || \
+               [[ "$file" == */src/main/resources/* ]] || \
+               [[ "$file" == common/* ]] || \
+               [[ "$file" == bukkit/* ]] || \
+               [[ "$file" == fabric/* ]] || \
+               [[ "$file" == forge/* ]] || \
+               [[ "$file" == neoforge/* ]] || \
+               [[ "$file" == "build.gradle.kts" ]] || \
+               [[ "$file" == "settings.gradle.kts" ]] || \
+               [[ "$file" == "gradle.properties" ]] || \
+               [[ "$file" == "gradle/libs.versions.toml" ]] || \
+               [[ "$file" == */build.gradle.kts ]]; then
+              SHOULD_DEPLOY="true"
+              echo "✅ Plugin file changed: $file"
+              break
+            fi
+          done <<< "$CHANGED_FILES"
+
+          echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
+          echo "Should deploy: $SHOULD_DEPLOY"
+
+      - name: Determine release type
+        id: release_type
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          if [ "$BRANCH" = "${{ inputs.production-branch }}" ]; then
+            echo "is_production=true" >> $GITHUB_OUTPUT
+            echo "📦 Production Release"
+          else
+            echo "is_production=false" >> $GITHUB_OUTPUT
+            echo "🔧 Development Build"
+          fi
+
+      - name: Get current version
+        id: current_version
+        run: |
+          # Use the latest production tag as the single source of truth.
+          # Reading from gradle.properties is branch-dependent and causes drift.
+          # Tags are branch-independent and always correct.
+          LAST_TAG=$(git tag -l "v[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | grep -v "\-dev\." | head -n1)
+          if [ -n "$LAST_TAG" ]; then
+            VERSION="${LAST_TAG#v}"
+          else
+            VERSION=$(grep "^modVersion=" gradle.properties | cut -d'=' -f2 | tr -d '\r\n' | sed 's/-dev.*//g' | sed 's/-SNAPSHOT//g')
+            [ -z "$VERSION" ] && VERSION="0.0.0"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version (from last tag): $VERSION"
+
+      - name: Determine version bump from commits
+        id: bump
+        run: |
+          LAST_TAG=$(git tag -l "v[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | grep -v "dev" | head -n1 || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"%s" --no-merges)
+          else
+            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" --no-merges)
+          fi
+
+          BUMP_TYPE="patch"
+          if echo "$COMMITS" | grep -qiE "^(BREAKING CHANGE|.*!:)"; then
+            BUMP_TYPE="major"
+          elif echo "$COMMITS" | grep -qiE "^(feat|feature)(\(.*\))?:"; then
+            BUMP_TYPE="minor"
+          fi
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+
+      - name: Calculate new version
+        id: new_version
+        run: |
+          CURRENT="${{ steps.current_version.outputs.version }}"
+          BUMP_TYPE="${{ steps.bump.outputs.bump_type }}"
+          IS_PRODUCTION="${{ steps.release_type.outputs.is_production }}"
+
+          if [ "$IS_PRODUCTION" = "true" ]; then
+            IFS='.' read -ra V <<< "$CURRENT"
+            MAJOR=${V[0]:-0}; MINOR=${V[1]:-0}; PATCH=${V[2]:-0}
+            case $BUMP_TYPE in
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch) PATCH=$((PATCH + 1)) ;;
+            esac
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          else
+            COMMIT_COUNT=$(git rev-list --count HEAD)
+            NEW_VERSION="${CURRENT}-dev.${COMMIT_COUNT}"
+          fi
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+  # ─── Build all platforms ──────────────────────────────────────────────────
+
+  build:
+    name: 🔨 Build All Platforms
+    needs: check-changes
+    if: needs.check-changes.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5
+        with:
+          java-version: ${{ inputs.java-version }}
+          distribution: 'temurin'
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a  # v4
+
+      - name: Grant execute permission
+        run: |
+          chmod +x gradlew
+          [ -f bukkit/gradlew ]   && chmod +x bukkit/gradlew   || true
+          [ -f fabric/gradlew ]   && chmod +x fabric/gradlew   || true
+          [ -f forge/gradlew ]    && chmod +x forge/gradlew    || true
+          [ -f neoforge/gradlew ] && chmod +x neoforge/gradlew || true
+
+      - name: Run common unit tests
+        run: ./gradlew :common:test --no-daemon -PmodVersion=${{ needs.check-changes.outputs.new_version }}
+
+      - name: Run bukkit unit tests
+        if: inputs.run-bukkit
+        working-directory: bukkit
+        run: ./gradlew test --no-daemon -PmodVersion=${{ needs.check-changes.outputs.new_version }}
+
+      - name: Build Bukkit
+        if: inputs.run-bukkit
+        working-directory: bukkit
+        run: ./gradlew build --no-daemon -PmodVersion=${{ needs.check-changes.outputs.new_version }}
+
+      - name: Build Fabric
+        if: inputs.run-fabric
+        working-directory: fabric
+        run: ./gradlew build --no-daemon -PmodVersion=${{ needs.check-changes.outputs.new_version }}
+
+      - name: Build Forge
+        if: inputs.run-forge
+        working-directory: forge
+        run: ./gradlew build --no-daemon -PmodVersion=${{ needs.check-changes.outputs.new_version }}
+
+      - name: Build NeoForge
+        if: inputs.run-neoforge
+        working-directory: neoforge
+        run: ./gradlew build --no-daemon -PmodVersion=${{ needs.check-changes.outputs.new_version }}
+
+      - name: Upload Bukkit artifact
+        if: inputs.run-bukkit
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        with:
+          name: bukkit-jar
+          path: bukkit/build/libs/*.jar
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload Fabric artifact
+        if: inputs.run-fabric
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        with:
+          name: fabric-jar
+          path: fabric/build/libs/*.jar
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload Forge artifact
+        if: inputs.run-forge
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        with:
+          name: forge-jar
+          path: forge/build/libs/*.jar
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload NeoForge artifact
+        if: inputs.run-neoforge
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        with:
+          name: neoforge-jar
+          path: neoforge/build/libs/*.jar
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        with:
+          name: test-results
+          path: '**/build/reports/tests/'
+
+  # ─── Integration tests ───────────────────────────────────────────────────
+
+  integration-bukkit:
+    name: 🪣 Integration Test (Paper)
+    needs: build
+    if: inputs.run-bukkit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5
+        with:
+          java-version: ${{ inputs.java-version }}
+          distribution: 'temurin'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: bukkit-jar
+          path: bukkit-build
+
+      - name: Download Paper server
+        run: |
+          mkdir -p test-server/plugins
+          MC_VERSION=$(grep -E '^minecraft = "[0-9]' gradle/libs.versions.toml | cut -d'"' -f2)
+          PAPER_BUILD=$(curl -s "https://api.papermc.io/v2/projects/paper/versions/${MC_VERSION}/builds" 2>/dev/null | jq -r '.builds[-1].build' 2>/dev/null)
+          if [ -z "$PAPER_BUILD" ] || [ "$PAPER_BUILD" = "null" ]; then
+            MC_VERSION=$(curl -s "https://api.papermc.io/v2/projects/paper" | jq -r '.versions[-1]')
+            PAPER_BUILD=$(curl -s "https://api.papermc.io/v2/projects/paper/versions/${MC_VERSION}/builds" | jq -r '.builds[-1].build')
+          fi
+          curl -o test-server/paper.jar \
+            "https://api.papermc.io/v2/projects/paper/versions/${MC_VERSION}/builds/${PAPER_BUILD}/downloads/paper-${MC_VERSION}-${PAPER_BUILD}.jar"
+          find bukkit-build -name "*.jar" ! -name "*-slim.jar" -exec cp {} test-server/plugins/ \;
+          echo "eula=true" > test-server/eula.txt
+          echo -e "online-mode=false\nspawn-protection=0\nmax-tick-time=-1" > test-server/server.properties
+
+      - name: Test plugin loads correctly
+        timeout-minutes: 5
+        env:
+          MOD_NAME: ${{ inputs.mod-name }}
+        run: |
+          cd test-server
+          java -Xmx1G -jar paper.jar --nogui &
+          SERVER_PID=$!
+          for i in {1..90}; do
+            if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
+            if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null; exit 1; fi
+            sleep 1
+          done
+          if grep -qi "$MOD_NAME" logs/latest.log; then
+            echo "✅ Plugin loaded!"; grep -i "$MOD_NAME" logs/latest.log | head -5
+          else
+            echo "❌ Plugin failed to load!"; cat logs/latest.log; exit 1
+          fi
+          if grep -qiE "(ERROR|SEVERE).*$MOD_NAME" logs/latest.log; then
+            echo "❌ Plugin has errors!"; grep -iE "(ERROR|SEVERE)" logs/latest.log; exit 1
+          fi
+          kill $SERVER_PID 2>/dev/null || true
+          echo "✅ Bukkit integration test passed!"
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        with:
+          name: paper-logs
+          path: test-server/logs/
+
+  integration-fabric:
+    name: 🧵 Integration Test (Fabric)
+    needs: build
+    if: inputs.run-fabric
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5
+        with:
+          java-version: ${{ inputs.java-version }}
+          distribution: 'temurin'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: fabric-jar
+          path: fabric-build
+
+      - name: Setup Fabric server
+        run: |
+          mkdir -p test-server/mods
+          MC_VERSION=$(grep -E '^minecraft = "[0-9]' gradle/libs.versions.toml | cut -d'"' -f2)
+          curl -o fabric-installer.jar "https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.0.1/fabric-installer-1.0.1.jar"
+          java -jar fabric-installer.jar server -mcversion $MC_VERSION -dir test-server -downloadMinecraft
+          FABRIC_API_URL=$(curl -s "https://api.modrinth.com/v2/project/fabric-api/version?game_versions=%5B%22${MC_VERSION}%22%5D&loaders=%5B%22fabric%22%5D" | jq -r '.[0].files[0].url')
+          if [ -n "$FABRIC_API_URL" ] && [ "$FABRIC_API_URL" != "null" ]; then
+            curl -L -o test-server/mods/fabric-api.jar "$FABRIC_API_URL"
+          fi
+          find fabric-build -name "*.jar" ! -name "*-dev.jar" ! -name "*-sources.jar" -exec cp {} test-server/mods/ \;
+          echo "eula=true" > test-server/eula.txt
+          echo -e "online-mode=false\nspawn-protection=0\nmax-tick-time=-1" > test-server/server.properties
+
+      - name: Test mod loads correctly
+        timeout-minutes: 5
+        env:
+          MOD_ID: ${{ inputs.mod-id }}
+        run: |
+          cd test-server
+          java -Xmx1G -jar fabric-server-launch.jar --nogui &
+          SERVER_PID=$!
+          for i in {1..90}; do
+            if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
+            if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null; exit 1; fi
+            sleep 1
+          done
+          grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log && { echo "❌ Mod has errors!"; exit 1; } || true
+          kill $SERVER_PID 2>/dev/null || true
+          echo "✅ Fabric integration test passed!"
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        with:
+          name: fabric-logs
+          path: test-server/logs/
+
+  integration-forge:
+    name: 🔥 Integration Test (Forge)
+    needs: build
+    if: inputs.run-forge
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5
+        with:
+          java-version: ${{ inputs.java-version }}
+          distribution: 'temurin'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: forge-jar
+          path: forge-build
+
+      - name: Cache Forge server installation
+        id: forge-server-cache
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        with:
+          path: ~/forge-server-base
+          key: forge-server-${{ hashFiles('gradle/libs.versions.toml') }}
+
+      - name: Download and install Forge server
+        if: steps.forge-server-cache.outputs.cache-hit != 'true'
+        run: |
+          FORGE_VERSION=$(grep -E '^forge = "[0-9]' gradle/libs.versions.toml | cut -d'"' -f2)
+          curl -f -o forge-installer.jar \
+            "https://maven.minecraftforge.net/net/minecraftforge/forge/${FORGE_VERSION}/forge-${FORGE_VERSION}-installer.jar"
+          mkdir -p ~/forge-server-base
+          java -jar forge-installer.jar --installServer ~/forge-server-base
+
+      - name: Setup test server
+        run: |
+          mkdir -p test-server/mods
+          cp -r ~/forge-server-base/. test-server/
+          find forge-build -name "*.jar" ! -name "*-sources.jar" ! -name "*-slim.jar" -exec cp {} test-server/mods/ \;
+          echo "eula=true" > test-server/eula.txt
+          echo -e "online-mode=false\nspawn-protection=0\nmax-tick-time=-1" > test-server/server.properties
+
+      - name: Test mod loads correctly
+        timeout-minutes: 8
+        env:
+          MOD_ID: ${{ inputs.mod-id }}
+        run: |
+          cd test-server
+          if [ -f "run.sh" ]; then
+            chmod +x run.sh && ./run.sh --nogui &
+          elif [ -f "run.bat" ]; then
+            JAVA_ARGS=$(grep "java" run.bat | sed 's/.*java/java/' | sed 's/%\*//g')
+            eval "$JAVA_ARGS --nogui" &
+          else
+            FORGE_JAR=$(find . -maxdepth 1 -name "forge-*.jar" ! -name "*installer*" | head -1)
+            if [ -n "$FORGE_JAR" ]; then
+              java -Xmx2G -jar "$FORGE_JAR" --nogui &
+            else
+              java -Xmx2G @user_jvm_args.txt @libraries/net/minecraftforge/forge/*/unix_args.txt --nogui &
+            fi
+          fi
+          SERVER_PID=$!
+          for i in {1..150}; do
+            if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
+            if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null || cat logs/debug.log 2>/dev/null; exit 1; fi
+            sleep 1
+          done
+          grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log 2>/dev/null && { echo "❌ Mod has errors!"; exit 1; } || true
+          kill $SERVER_PID 2>/dev/null || true
+          echo "✅ Forge integration test passed!"
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        with:
+          name: forge-logs
+          path: test-server/logs/
+
+  integration-neoforge:
+    name: ⚒️ Integration Test (NeoForge)
+    needs: build
+    if: inputs.run-neoforge
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5
+        with:
+          java-version: ${{ inputs.java-version }}
+          distribution: 'temurin'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          name: neoforge-jar
+          path: neoforge-build
+
+      - name: Cache NeoForge server installation
+        id: neoforge-server-cache
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        with:
+          path: ~/neoforge-server-base
+          key: neoforge-server-${{ hashFiles('gradle/libs.versions.toml') }}
+
+      - name: Download and install NeoForge server
+        if: steps.neoforge-server-cache.outputs.cache-hit != 'true'
+        run: |
+          NEOFORGE_VERSION=$(grep '^neoforge = ' gradle/libs.versions.toml | cut -d'"' -f2)
+          curl -f -o neoforge-installer.jar \
+            "https://maven.neoforged.net/releases/net/neoforged/neoforge/${NEOFORGE_VERSION}/neoforge-${NEOFORGE_VERSION}-installer.jar"
+          mkdir -p ~/neoforge-server-base
+          java -jar neoforge-installer.jar --installServer ~/neoforge-server-base
+
+      - name: Setup test server
+        run: |
+          mkdir -p test-server/mods
+          cp -r ~/neoforge-server-base/. test-server/
+          find neoforge-build -name "*.jar" ! -name "*-sources.jar" ! -name "*-slim.jar" -exec cp {} test-server/mods/ \;
+          echo "eula=true" > test-server/eula.txt
+          echo -e "online-mode=false\nspawn-protection=0\nmax-tick-time=-1" > test-server/server.properties
+
+      - name: Test mod loads correctly
+        timeout-minutes: 8
+        env:
+          MOD_ID: ${{ inputs.mod-id }}
+        run: |
+          cd test-server
+          if [ -f "run.sh" ]; then
+            chmod +x run.sh && ./run.sh --nogui &
+          else
+            java -Xmx2G @user_jvm_args.txt @libraries/net/neoforged/neoforge/*/unix_args.txt --nogui &
+          fi
+          SERVER_PID=$!
+          for i in {1..150}; do
+            if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
+            if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null; exit 1; fi
+            sleep 1
+          done
+          grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log 2>/dev/null && { echo "❌ Mod has errors!"; exit 1; } || true
+          kill $SERVER_PID 2>/dev/null || true
+          echo "✅ NeoForge integration test passed!"
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        with:
+          name: neoforge-logs
+          path: test-server/logs/
+
+  # ─── Release ─────────────────────────────────────────────────────────────
+
+  release:
+    name: 🚀 Release
+    needs: [check-changes, build, integration-bukkit, integration-fabric, integration-forge, integration-neoforge]
+    if: needs.check-changes.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8
+        with:
+          path: artifacts
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          LAST_TAG=$(git tag -l "v[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | grep -v "dev" | head -n1 || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"%s|%h" --no-merges -20)
+          else
+            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s|%h" --no-merges)
+          fi
+
+          FEATURES=""; FIXES=""; OTHER=""
+          while IFS='|' read -r msg hash; do
+            [ -z "$msg" ] && continue
+            if echo "$msg" | grep -qiE "^feat(\(.*\))?!?:"; then
+              FEATURES="${FEATURES}- ${msg} (\`${hash}\`)\n"
+            elif echo "$msg" | grep -qiE "^fix(\(.*\))?:"; then
+              FIXES="${FIXES}- ${msg} (\`${hash}\`)\n"
+            else
+              OTHER="${OTHER}- ${msg} (\`${hash}\`)\n"
+            fi
+          done <<< "$COMMITS"
+
+          CHANGELOG=""
+          [ -n "$FEATURES" ] && CHANGELOG="${CHANGELOG}### ✨ New Features\n${FEATURES}\n"
+          [ -n "$FIXES" ]    && CHANGELOG="${CHANGELOG}### 🐛 Bug Fixes\n${FIXES}\n"
+          [ -n "$OTHER" ]    && CHANGELOG="${CHANGELOG}### 🔧 Other Changes\n${OTHER}\n"
+
+          FEAT_COUNT=$(echo -e "$FEATURES" | grep -c "^-" || echo "0")
+          FIX_COUNT=$(echo -e "$FIXES"    | grep -c "^-" || echo "0")
+          SUMMARY=""
+          [ "$FEAT_COUNT" -gt 0 ] && SUMMARY="${FEAT_COUNT} new feature(s)"
+          [ "$FIX_COUNT" -gt 0 ] && [ -n "$SUMMARY" ] && SUMMARY="${SUMMARY}, "
+          [ "$FIX_COUNT" -gt 0 ] && SUMMARY="${SUMMARY}${FIX_COUNT} bug fix(es)"
+          [ -z "$SUMMARY" ] && SUMMARY="Maintenance update"
+
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
+
+      - name: Collect release artifacts
+        env:
+          MOD_NAME: ${{ inputs.mod-name }}
+          VERSION:  ${{ needs.check-changes.outputs.new_version }}
+        run: |
+          mkdir -p release-artifacts
+          echo "📦 Collecting artifacts for ${MOD_NAME} v${VERSION}..."
+
+          if [ "${{ inputs.run-bukkit }}" = "true" ]; then
+            JAR=$(find artifacts/bukkit-jar -name "*.jar" ! -name "*-slim.jar" -type f 2>/dev/null | head -1)
+            [ -n "$JAR" ] && cp "$JAR" "release-artifacts/${MOD_NAME}-Bukkit-${VERSION}.jar" && echo "✅ Bukkit"
+          fi
+          if [ "${{ inputs.run-fabric }}" = "true" ]; then
+            JAR=$(find artifacts/fabric-jar -name "*.jar" ! -name "*-dev.jar" ! -name "*-sources.jar" -type f 2>/dev/null | head -1)
+            [ -n "$JAR" ] && cp "$JAR" "release-artifacts/${MOD_NAME}-Fabric-${VERSION}.jar" && echo "✅ Fabric"
+          fi
+          if [ "${{ inputs.run-forge }}" = "true" ]; then
+            JAR=$(find artifacts/forge-jar -name "*.jar" ! -name "*-sources.jar" ! -name "*-slim.jar" -type f 2>/dev/null | head -1)
+            [ -n "$JAR" ] && cp "$JAR" "release-artifacts/${MOD_NAME}-Forge-${VERSION}.jar" && echo "✅ Forge"
+          fi
+          if [ "${{ inputs.run-neoforge }}" = "true" ]; then
+            JAR=$(find artifacts/neoforge-jar -name "*.jar" ! -name "*-sources.jar" ! -name "*-slim.jar" -type f 2>/dev/null | head -1)
+            [ -n "$JAR" ] && cp "$JAR" "release-artifacts/${MOD_NAME}-NeoForge-${VERSION}.jar" && echo "✅ NeoForge"
+          fi
+
+          echo ""
+          echo "=== Final release artifacts ==="
+          ls -la release-artifacts/
+
+      - name: Update version and commit (production only)
+        if: needs.check-changes.outputs.is_production == 'true'
+        env:
+          PROD_BRANCH:    ${{ inputs.production-branch }}
+          DEVELOP_BRANCH: ${{ inputs.develop-branch }}
+          NEW_VERSION:    ${{ needs.check-changes.outputs.new_version }}
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          sed -i "s/^modVersion=.*/modVersion=$NEW_VERSION/" gradle.properties
+          git add gradle.properties
+          git commit -m "chore: release v${NEW_VERSION} [skip ci]"
+          git push origin $PROD_BRANCH
+
+          # Sync version back to develop so dev builds always use the correct base.
+          git fetch origin $DEVELOP_BRANCH
+          git checkout -B $DEVELOP_BRANCH origin/$DEVELOP_BRANCH
+          if git diff --quiet gradle.properties; then
+            echo "$DEVELOP_BRANCH already has modVersion=$NEW_VERSION — no sync needed"
+          else
+            sed -i "s/^modVersion=.*/modVersion=$NEW_VERSION/" gradle.properties
+            git add gradle.properties
+            git commit -m "chore: sync version to v${NEW_VERSION} [skip ci]"
+            git push origin HEAD:$DEVELOP_BRANCH
+          fi
+          git checkout $PROD_BRANCH
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@26e8ad27a09a225049a7075d7ec1caa2df6ff332  # v2.6.0
+        with:
+          tag_name: v${{ needs.check-changes.outputs.new_version }}
+          name: "${{ needs.check-changes.outputs.is_production == 'true' && '🚀' || '🔧' }} ${{ inputs.mod-name }} v${{ needs.check-changes.outputs.new_version }}"
+          body: |
+            ${{ needs.check-changes.outputs.is_production == 'true' && '> **Stable Release**' || '> **Development Build** - For testing only' }} — ${{ steps.changelog.outputs.summary }}
+
+            ## What's Changed
+
+            ${{ steps.changelog.outputs.changelog }}
+
+            ## 📦 Downloads
+
+            | Platform | File |
+            |----------|------|
+            ${{ inputs.run-bukkit   && format('| **Bukkit/Spigot/Paper** | `{0}-Bukkit-{1}.jar` |', inputs.mod-name, needs.check-changes.outputs.new_version) || '' }}
+            ${{ inputs.run-fabric   && format('| **Fabric** | `{0}-Fabric-{1}.jar` |', inputs.mod-name, needs.check-changes.outputs.new_version) || '' }}
+            ${{ inputs.run-forge    && format('| **Forge** | `{0}-Forge-{1}.jar` |', inputs.mod-name, needs.check-changes.outputs.new_version) || '' }}
+            ${{ inputs.run-neoforge && format('| **NeoForge** | `{0}-NeoForge-{1}.jar` |', inputs.mod-name, needs.check-changes.outputs.new_version) || '' }}
+          files: release-artifacts/*.jar
+          draft: false
+          prerelease: ${{ needs.check-changes.outputs.is_production != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Bukkit to Modrinth
+        if: inputs.run-bukkit && needs.check-changes.outputs.is_production == 'true' && inputs.modrinth-project-id != ''
+        uses: Kir-Antipov/mc-publish@995edadc13559a8b28d0b7e6571229f067ec7659  # v3.3
+        with:
+          modrinth-id: ${{ inputs.modrinth-project-id }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          files: release-artifacts/${{ inputs.mod-name }}-Bukkit-${{ needs.check-changes.outputs.new_version }}.jar
+          name: v${{ needs.check-changes.outputs.new_version }} (Bukkit)
+          version: ${{ needs.check-changes.outputs.new_version }}-bukkit
+          version-type: release
+          loaders: |
+            spigot
+            paper
+            purpur
+            bukkit
+          game-versions: ${{ inputs.bukkit-mc-versions }}
+        continue-on-error: true
+
+      - name: Publish Fabric to Modrinth
+        if: inputs.run-fabric && needs.check-changes.outputs.is_production == 'true' && inputs.modrinth-project-id != ''
+        uses: Kir-Antipov/mc-publish@995edadc13559a8b28d0b7e6571229f067ec7659  # v3.3
+        with:
+          modrinth-id: ${{ inputs.modrinth-project-id }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          files: release-artifacts/${{ inputs.mod-name }}-Fabric-${{ needs.check-changes.outputs.new_version }}.jar
+          name: v${{ needs.check-changes.outputs.new_version }} (Fabric)
+          version: ${{ needs.check-changes.outputs.new_version }}-fabric
+          version-type: release
+          loaders: |
+            fabric
+            quilt
+          game-versions: ${{ inputs.fabric-mc-versions }}
+          dependencies: |
+            fabric-api | depends
+        continue-on-error: true
+
+      - name: Publish Forge to Modrinth
+        if: inputs.run-forge && needs.check-changes.outputs.is_production == 'true' && inputs.modrinth-project-id != ''
+        uses: Kir-Antipov/mc-publish@995edadc13559a8b28d0b7e6571229f067ec7659  # v3.3
+        with:
+          modrinth-id: ${{ inputs.modrinth-project-id }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          files: release-artifacts/${{ inputs.mod-name }}-Forge-${{ needs.check-changes.outputs.new_version }}.jar
+          name: v${{ needs.check-changes.outputs.new_version }} (Forge)
+          version: ${{ needs.check-changes.outputs.new_version }}-forge
+          version-type: release
+          loaders: |
+            forge
+          game-versions: ${{ inputs.forge-mc-versions }}
+        continue-on-error: true
+
+      - name: Publish NeoForge to Modrinth
+        if: inputs.run-neoforge && needs.check-changes.outputs.is_production == 'true' && inputs.modrinth-project-id != ''
+        uses: Kir-Antipov/mc-publish@995edadc13559a8b28d0b7e6571229f067ec7659  # v3.3
+        with:
+          modrinth-id: ${{ inputs.modrinth-project-id }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          files: release-artifacts/${{ inputs.mod-name }}-NeoForge-${{ needs.check-changes.outputs.new_version }}.jar
+          name: v${{ needs.check-changes.outputs.new_version }} (NeoForge)
+          version: ${{ needs.check-changes.outputs.new_version }}-neoforge
+          version-type: release
+          loaders: |
+            neoforge
+          game-versions: ${{ inputs.neoforge-mc-versions }}
+        continue-on-error: true
+
+      - name: Update Modrinth project description
+        if: needs.check-changes.outputs.is_production == 'true' && inputs.modrinth-project-id != ''
+        run: |
+          DESCRIPTION_FILE="${{ inputs.modrinth-description-path }}"
+          if [ -f "$DESCRIPTION_FILE" ]; then
+            curl -s -X PATCH \
+              "https://api.modrinth.com/v2/project/${{ inputs.modrinth-project-id }}" \
+              -H "Authorization: ${{ secrets.MODRINTH_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"body\": $(jq -Rs . < "$DESCRIPTION_FILE")}"
+          fi
