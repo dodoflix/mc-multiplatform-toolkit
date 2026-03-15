@@ -1,4 +1,4 @@
-name: Release
+name: Self CD
 
 on:
   push:
@@ -60,10 +60,12 @@ jobs:
 
           NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
           echo "New version: v$NEW_VERSION"
-          echo "skip=false"          >> "$GITHUB_OUTPUT"
-          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$NEW_VERSION"    >> "$GITHUB_OUTPUT"
-          echo "major=v$MAJOR"        >> "$GITHUB_OUTPUT"
+          {
+            echo "skip=false"
+            echo "version=$NEW_VERSION"
+            echo "tag=v$NEW_VERSION"
+            echo "major=v$MAJOR"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build release notes
         id: notes

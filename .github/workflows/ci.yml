@@ -519,35 +519,35 @@ jobs:
         run: |
           status() { case "$1" in success) echo "✅ Passed" ;; skipped) echo "⏭️ Skipped" ;; *) echo "❌ Failed ($1)" ;; esac; }
 
-          echo "## 🏗️ CI Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🏗️ CI Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$SHOULD_TEST" != "true" ]; then
-            echo "⏭️ Skipped — no relevant code changes." >> $GITHUB_STEP_SUMMARY
+            echo "⏭️ Skipped — no relevant code changes." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Unit Tests       | $(status "$RESULT_UNIT") |"     >> $GITHUB_STEP_SUMMARY
-          echo "| Bukkit Build     | $(status "$RESULT_BUKKIT") |"   >> $GITHUB_STEP_SUMMARY
-          echo "| Fabric Build     | $(status "$RESULT_FABRIC") |"   >> $GITHUB_STEP_SUMMARY
-          echo "| Forge Build      | $(status "$RESULT_FORGE") |"    >> $GITHUB_STEP_SUMMARY
-          echo "| NeoForge Build   | $(status "$RESULT_NEOFORGE") |" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Unit Tests       | $(status "$RESULT_UNIT") |"     >> "$GITHUB_STEP_SUMMARY"
+          echo "| Bukkit Build     | $(status "$RESULT_BUKKIT") |"   >> "$GITHUB_STEP_SUMMARY"
+          echo "| Fabric Build     | $(status "$RESULT_FABRIC") |"   >> "$GITHUB_STEP_SUMMARY"
+          echo "| Forge Build      | $(status "$RESULT_FORGE") |"    >> "$GITHUB_STEP_SUMMARY"
+          echo "| NeoForge Build   | $(status "$RESULT_NEOFORGE") |" >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Integration Tests" >> $GITHUB_STEP_SUMMARY
-            echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
-            echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
-            echo "| Bukkit/Paper | $(status "$RESULT_T_BUKKIT") |"   >> $GITHUB_STEP_SUMMARY
-            echo "| Fabric       | $(status "$RESULT_T_FABRIC") |"   >> $GITHUB_STEP_SUMMARY
-            echo "| Forge        | $(status "$RESULT_T_FORGE") |"    >> $GITHUB_STEP_SUMMARY
-            echo "| NeoForge     | $(status "$RESULT_T_NEOFORGE") |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Integration Tests" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Platform | Status |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|----------|--------|" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Bukkit/Paper | $(status "$RESULT_T_BUKKIT") |"   >> "$GITHUB_STEP_SUMMARY"
+            echo "| Fabric       | $(status "$RESULT_T_FABRIC") |"   >> "$GITHUB_STEP_SUMMARY"
+            echo "| Forge        | $(status "$RESULT_T_FORGE") |"    >> "$GITHUB_STEP_SUMMARY"
+            echo "| NeoForge     | $(status "$RESULT_T_NEOFORGE") |" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> 📦 Build artifacts available in the Actions artifacts section." >> $GITHUB_STEP_SUMMARY
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> 📦 Build artifacts available in the Actions artifacts section." >> "$GITHUB_STEP_SUMMARY"
 
           for result in "$RESULT_UNIT" "$RESULT_BUKKIT" "$RESULT_FABRIC" "$RESULT_FORGE" "$RESULT_NEOFORGE" \
                         "$RESULT_T_BUKKIT" "$RESULT_T_FABRIC" "$RESULT_T_FORGE" "$RESULT_T_NEOFORGE"; do
