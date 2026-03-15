@@ -230,7 +230,7 @@ jobs:
     if: |
       inputs.run-bukkit &&
       needs.build-bukkit.result == 'success' &&
-      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
+      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -296,7 +296,7 @@ jobs:
     if: |
       inputs.run-fabric &&
       needs.build-fabric.result == 'success' &&
-      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
+      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -354,7 +354,7 @@ jobs:
     if: |
       inputs.run-forge &&
       needs.build-forge.result == 'success' &&
-      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
+      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -434,7 +434,7 @@ jobs:
     if: |
       inputs.run-neoforge &&
       needs.build-neoforge.result == 'success' &&
-      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
+      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -520,6 +520,7 @@ jobs:
           RESULT_T_FORGE:    ${{ needs.test-forge.result }}
           RESULT_T_NEOFORGE: ${{ needs.test-neoforge.result }}
           EVENT_NAME:        ${{ github.event_name }}
+          GIT_REF:           ${{ github.ref }}
           SHOULD_TEST:       ${{ needs.check-changes.outputs.should_test }}
         run: |
           status() { case "$1" in success) echo "✅ Passed" ;; skipped) echo "⏭️ Skipped" ;; *) echo "❌ Failed ($1)" ;; esac; }
@@ -544,7 +545,7 @@ jobs:
             echo "| NeoForge Build   | $(status "$RESULT_NEOFORGE") |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "workflow_dispatch" ] || ([ "$EVENT_NAME" = "push" ] && ([ "$GIT_REF" = "refs/heads/master" ] || [ "$GIT_REF" = "refs/heads/main" ] || [ "$GIT_REF" = "refs/heads/develop" ])); then
             {
               echo ""
               echo "### Integration Tests"
