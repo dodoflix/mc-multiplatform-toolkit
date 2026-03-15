@@ -621,10 +621,12 @@ jobs:
           [ "$FIX_COUNT" -gt 0 ] && SUMMARY="${SUMMARY}${FIX_COUNT} bug fix(es)"
           [ -z "$SUMMARY" ] && SUMMARY="Maintenance update"
 
-          echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
-          echo -e "$CHANGELOG" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-          echo "summary=$SUMMARY" >> "$GITHUB_OUTPUT"
+          {
+            echo "changelog<<EOF"
+            echo -e "$CHANGELOG"
+            echo "EOF"
+            echo "summary=$SUMMARY"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Collect release artifacts
         env:
