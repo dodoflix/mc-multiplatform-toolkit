@@ -13,7 +13,7 @@ body:
     attributes:
       label: Affected Workflow
       description: Which workflow file is affected?
-      placeholder: "ci.yml / release.yml"
+      placeholder: "ci.yml / cd.yml / validate.yml / self-cd.yml"
     validations:
       required: true
 

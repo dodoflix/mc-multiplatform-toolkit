@@ -11,7 +11,7 @@ Thank you for your interest in contributing!
 
 ## What Can Be Contributed
 
-- Improvements to `ci.yml` or `release.yml` reusable workflows
+- Improvements to `ci.yml`, `cd.yml`, `validate.yml`, or `self-cd.yml` reusable workflows
 - New reusable workflow files for other use cases
 - Documentation improvements
 - Bug fixes for workflow logic
@@ -55,7 +55,7 @@ This toolkit uses [Semantic Versioning](https://semver.org/). Callers may pin to
 
 Since this repo contains only workflow files, changes should be tested by:
 
-1. Pointing a test project's caller to your branch: `dodoflix/mc-multiplatform-toolkit/.github/workflows/ci.yml@your-branch`
+1. Point a test project's caller to your branch: `dodoflix/mc-multiplatform-toolkit/.github/workflows/ci.yml@your-branch` (or `cd.yml@your-branch`)
 2. Triggering a run on the test project
 3. Verifying all jobs complete as expected
 

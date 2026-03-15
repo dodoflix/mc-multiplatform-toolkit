@@ -13,9 +13,10 @@ body:
       label: Affected Workflow
       options:
         - ci.yml
-        - release.yml
+        - cd.yml
+        - validate.yml
+        - self-cd.yml
         - New workflow
-        - Both
     validations:
       required: true
 

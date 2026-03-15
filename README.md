@@ -49,11 +49,11 @@ jobs:
     secrets: inherit
 ```
 
-### `release.yml` — Automated Release & Publishing
+### `cd.yml` — Automated Release & Publishing
 
 Calculates semantic version from commit messages, builds all platforms, runs integration tests, creates a GitHub Release, and publishes to Modrinth (production only).
 
-**Caller workflow** (`.github/workflows/release.yml` in your project):
+**Caller workflow** (`.github/workflows/cd.yml` in your project):
 
 ```yaml
 name: Release
@@ -66,7 +66,7 @@ permissions:
 
 jobs:
   release:
-    uses: dodoflix/mc-multiplatform-toolkit/.github/workflows/release.yml@main
+    uses: dodoflix/mc-multiplatform-toolkit/.github/workflows/cd.yml@main
     with:
       mod-name: YourModName
       mod-id: yourmodname
@@ -97,7 +97,7 @@ jobs:
 | `run-forge` | boolean | `true` | Enable Forge build + integration test |
 | `run-neoforge` | boolean | `true` | Enable NeoForge build + integration test |
 
-### `release.yml`
+### `cd.yml`
 
 All `ci.yml` inputs, plus:
 

@@ -5,6 +5,20 @@
 
 ---
 
+## File Sync Rules
+
+When any of the files below are updated, you **must** also update all listed dependents in the same commit:
+
+| File changed | Also update |
+|---|---|
+| `.github/workflows/ci.yml` (inputs, jobs, behaviour) | `README.md` inputs reference table; this file's **Files** section |
+| `.github/workflows/cd.yml` (inputs, jobs, behaviour) | `README.md` inputs reference table; this file's **Files** section |
+| `.github/workflows/validate.yml` | This file's **Files** section |
+| `.github/workflows/self-cd.yml` | This file's **Files** section |
+| Any workflow added or removed | `README.md`; `CONTRIBUTING.md`; this file; issue templates |
+
+---
+
 ## Project Overview
 
 A collection of reusable GitHub Actions [`workflow_call`](https://docs.github.com/en/actions/sharing-automations/reusing-workflows) workflows for multi-platform Minecraft mods and plugins. Projects **call** these workflows rather than copy them, so improvements propagate automatically.
@@ -17,8 +31,10 @@ A collection of reusable GitHub Actions [`workflow_call`](https://docs.github.co
 
 ```
 .github/workflows/
-├── ci.yml       ← Reusable CI: check-changes → unit-tests → build-* → test-* → summary
-└── release.yml  ← Reusable release: versioning → build → integration-tests → GitHub Release → Modrinth
+├── ci.yml          ← Reusable CI: check-changes → unit-tests → build-* → test-* → summary
+├── cd.yml          ← Reusable release: versioning → build → integration-tests → GitHub Release → Modrinth
+├── validate.yml    ← Toolkit's own CI: actionlint + SHA-pin check on push/PR to develop/main
+└── self-cd.yml     ← Toolkit's own release: semantic versioning → GitHub Release + floating tag
 ```
 
 There is **no application code** in this repository — only workflow YAML files.
@@ -84,6 +100,8 @@ Since this repo contains only workflow YAML, test by:
 1. Point a test project's caller to your branch:
    ```yaml
    uses: dodoflix/mc-multiplatform-toolkit/.github/workflows/ci.yml@your-branch
+   # or for cd.yml:
+   uses: dodoflix/mc-multiplatform-toolkit/.github/workflows/cd.yml@your-branch
    ```
 2. Trigger a run on the test project (push a commit or `workflow_dispatch`)
 3. Verify all jobs complete as expected
