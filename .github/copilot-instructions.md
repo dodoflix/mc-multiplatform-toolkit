@@ -44,6 +44,28 @@ Assess scope before touching any workflow file:
 
 ---
 
+### Reference Consistency Check
+
+**After every change — before committing — scan for stale references.**
+
+Any time you rename, move, or change a workflow name, input, output, or documented behaviour, grep for it everywhere:
+
+```bash
+# Find all references to a renamed file, input, or concept
+grep -r "old-name" . --include="*.md" --include="*.yml"
+```
+
+Things to check after common change types:
+
+- **Workflow renamed** → grep old name in `README.md`, `CONTRIBUTING.md`, this file, issue templates, and caller workflows in consumer projects
+- **Input added/renamed/removed** → update `README.md` inputs table; check existing callers
+- **New workflow added** → update this file's **Files** section, `README.md`, `CONTRIBUTING.md`, issue templates
+- **self-cd.yml versioning logic changed** → check `README.md` versioning section and this file's **Versioning Strategy**
+
+**Fix every stale reference in the same commit as the original change.** A rename with dangling references is an incomplete commit.
+
+---
+
 ### Workflow-Specific "TDD"
 
 This repo has no unit tests, but actionlint acts as the test suite. Follow this cycle:
@@ -59,19 +81,7 @@ For new inputs: document the input in `README.md` inputs table *before* implemen
 
 ---
 
-## File Sync Rules
 
-When any of the files below are updated, you **must** also update all listed dependents in the same commit:
-
-| File changed | Also update |
-|---|---|
-| `.github/workflows/ci.yml` (inputs, jobs, behaviour) | `README.md` inputs reference table; this file's **Files** section |
-| `.github/workflows/cd.yml` (inputs, jobs, behaviour) | `README.md` inputs reference table; this file's **Files** section |
-| `.github/workflows/validate.yml` | This file's **Files** section |
-| `.github/workflows/self-cd.yml` | This file's **Files** section |
-| Any workflow added or removed | `README.md`; `CONTRIBUTING.md`; this file; issue templates |
-
----
 
 ## Project Overview
 
