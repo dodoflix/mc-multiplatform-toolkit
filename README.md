@@ -14,7 +14,7 @@ Supports **Bukkit/Spigot/Paper**, **Fabric**, **Forge**, and **NeoForge** from a
 
 ### `ci.yml` — Continuous Integration
 
-Runs unit tests, builds all platforms in parallel, and runs integration tests (on PRs and manual dispatch).
+Runs unit tests, builds all platforms in parallel, and runs integration tests (on PRs, manual dispatch, and pushes to `master`/`main`/`develop`).
 
 **Pipeline:**
 ```
@@ -46,6 +46,7 @@ jobs:
       run-fabric: true            # optional, default: true
       run-forge: true             # optional, default: true
       run-neoforge: true          # optional, default: true
+      upload-coverage: true       # optional, default: true — requires CODECOV_TOKEN secret
     secrets: inherit
 ```
 
@@ -56,9 +57,12 @@ Calculates semantic version from commit messages, builds all platforms, runs int
 **Caller workflow** (`.github/workflows/cd.yml` in your project):
 
 ```yaml
-name: Release
+name: CD
+
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [master, develop]
 
 permissions:
@@ -66,6 +70,7 @@ permissions:
 
 jobs:
   release:
+    if: github.event.workflow_run.conclusion == 'success'
     uses: dodoflix/mc-multiplatform-toolkit/.github/workflows/cd.yml@main
     with:
       mod-name: YourModName
@@ -80,6 +85,8 @@ jobs:
       neoforge-mc-versions: "1.21.11"
     secrets: inherit
 ```
+
+> **Note:** Using `workflow_run` ensures CD only fires after CI succeeds — releases cannot happen from a broken build.
 
 ---
 
@@ -96,6 +103,7 @@ jobs:
 | `run-fabric` | boolean | `true` | Enable Fabric build + integration test |
 | `run-forge` | boolean | `true` | Enable Forge build + integration test |
 | `run-neoforge` | boolean | `true` | Enable NeoForge build + integration test |
+| `upload-coverage` | boolean | `true` | Upload JaCoCo XML reports to Codecov after unit tests |
 
 ### `cd.yml`
 
@@ -119,9 +127,10 @@ All `ci.yml` inputs, plus:
 | Secret / Variable | Where to set | Description |
 |-------------------|-------------|-------------|
 | `MODRINTH_TOKEN` | Repository **secret** | Modrinth API token |
+| `CODECOV_TOKEN` | Repository **secret** | Codecov upload token — required when `upload-coverage: true` |
 | `MODRINTH_PROJECT_ID` | Repository **variable** (`vars.*`) | Modrinth project slug or ID |
 
-`GITHUB_TOKEN` is provided automatically by GitHub Actions.
+`GITHUB_TOKEN` is provided automatically by GitHub Actions. `CODECOV_TOKEN` is optional — if absent, coverage upload is silently skipped (`fail_ci_if_error: false`).
 
 ---
 
