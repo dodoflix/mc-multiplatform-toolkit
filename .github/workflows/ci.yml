@@ -50,23 +50,28 @@ jobs:
 
       - name: Check for code file changes
         id: changes
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message || github.event.pull_request.title }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
         run: |
-          COMMIT_MSG="${{ github.event.head_commit.message || github.event.pull_request.title }}"
+          COMMIT_MSG="${COMMIT_MSG:-}"
 
           if [[ "$COMMIT_MSG" == *"[skip ci]"* ]] || [[ "$COMMIT_MSG" == *"[ci skip]"* ]]; then
             echo "⏭️ Skipping due to [skip ci]"
-            echo "should_test=false" >> $GITHUB_OUTPUT
+            echo "should_test=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if [[ "$COMMIT_MSG" == *"[force deploy]"* ]] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [[ "$COMMIT_MSG" == *"[force deploy]"* ]] || [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             echo "✅ Force run"
-            echo "should_test=true" >> $GITHUB_OUTPUT
+            echo "should_test=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} 2>/dev/null || git diff --name-only HEAD~1 HEAD)
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only "$PR_BASE_SHA" "$HEAD_SHA" 2>/dev/null || git diff --name-only HEAD~1 HEAD)
           else
             CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)
           fi
@@ -95,7 +100,7 @@ jobs:
             fi
           done <<< "$CHANGED_FILES"
 
-          echo "should_test=$SHOULD_TEST" >> $GITHUB_OUTPUT
+          echo "should_test=$SHOULD_TEST" >> "$GITHUB_OUTPUT"
           echo "Should test: $SHOULD_TEST"
 
   # ─── Unit tests ──────────────────────────────────────────────────────────
@@ -115,7 +120,7 @@ jobs:
       - name: Make gradlew executables
         run: |
           chmod +x gradlew
-          [ -f bukkit/gradlew ] && chmod +x bukkit/gradlew || true
+          if [ -f bukkit/gradlew ]; then chmod +x bukkit/gradlew; fi
       - name: Run common tests
         run: ./gradlew :common:test --no-daemon
       - name: Run bukkit tests

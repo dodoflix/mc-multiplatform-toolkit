@@ -668,20 +668,20 @@ jobs:
           sed -i "s/^modVersion=.*/modVersion=$NEW_VERSION/" gradle.properties
           git add gradle.properties
           git commit -m "chore: release v${NEW_VERSION} [skip ci]"
-          git push origin $PROD_BRANCH
+          git push origin "$PROD_BRANCH"
 
           # Sync version back to develop so dev builds always use the correct base.
-          git fetch origin $DEVELOP_BRANCH
-          git checkout -B $DEVELOP_BRANCH origin/$DEVELOP_BRANCH
+          git fetch origin "$DEVELOP_BRANCH"
+          git checkout -B "$DEVELOP_BRANCH" "origin/$DEVELOP_BRANCH"
           if git diff --quiet gradle.properties; then
             echo "$DEVELOP_BRANCH already has modVersion=$NEW_VERSION — no sync needed"
           else
             sed -i "s/^modVersion=.*/modVersion=$NEW_VERSION/" gradle.properties
             git add gradle.properties
             git commit -m "chore: sync version to v${NEW_VERSION} [skip ci]"
-            git push origin HEAD:$DEVELOP_BRANCH
+            git push origin "HEAD:$DEVELOP_BRANCH"
           fi
-          git checkout $PROD_BRANCH
+          git checkout "$PROD_BRANCH"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@26e8ad27a09a225049a7075d7ec1caa2df6ff332  # v2.6.0
