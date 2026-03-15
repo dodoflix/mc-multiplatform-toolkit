@@ -1,0 +1,8 @@
+# Code owners for mc-multiplatform-toolkit
+# Owners are automatically requested for review on PRs.
+
+# Default owner for everything
+* @dodoflix
+
+# Workflow files — require maintainer approval
+.github/workflows/ @dodoflix

@@ -1,0 +1,45 @@
+name: Feature Request
+description: Suggest a new feature or improvement to the toolkit
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea to improve the toolkit? Great! Please describe it below.
+
+  - type: dropdown
+    id: workflow
+    attributes:
+      label: Affected Workflow
+      options:
+        - ci.yml
+        - release.yml
+        - New workflow
+        - Both
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Motivation
+      description: What problem does this feature solve?
+      placeholder: "Currently, there's no way to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: compat
+    attributes:
+      label: Compatibility
+      options:
+        - label: This change is backward-compatible (existing callers won't break)
+        - label: This change requires existing callers to update their `with:` block

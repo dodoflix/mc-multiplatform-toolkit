@@ -1,0 +1,69 @@
+name: Bug Report
+description: Report a bug in the toolkit workflows
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a bug!
+        Please fill out the sections below to help us diagnose the issue.
+
+  - type: input
+    id: workflow
+    attributes:
+      label: Affected Workflow
+      description: Which workflow file is affected?
+      placeholder: "ci.yml / release.yml"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Affected Platform(s)
+      description: Which platform(s) are affected?
+      multiple: true
+      options:
+        - Bukkit/Spigot/Paper
+        - Fabric
+        - Forge
+        - NeoForge
+        - All platforms
+        - Not platform-specific
+    validations:
+      required: true
+
+  - type: input
+    id: run-url
+    attributes:
+      label: Failed Workflow Run URL
+      description: Link to the failed GitHub Actions run
+      placeholder: "https://github.com/your-org/your-repo/actions/runs/12345"
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug clearly.
+      placeholder: "The NeoForge integration test always fails because..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      placeholder: "The integration test should pass when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: caller-config
+    attributes:
+      label: Caller workflow configuration
+      description: Paste the relevant `with:` block from your caller workflow.
+      render: yaml
+    validations:
+      required: false
