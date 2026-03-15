@@ -111,7 +111,7 @@ jobs:
         with:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
-      - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947  # v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a  # v4
       - name: Make gradlew executables
         run: |
           chmod +x gradlew
@@ -142,7 +142,7 @@ jobs:
         with:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
-      - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947  # v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a  # v4
       - run: chmod +x bukkit/gradlew
       - working-directory: bukkit
         run: ./gradlew build --no-daemon
@@ -163,7 +163,7 @@ jobs:
         with:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
-      - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947  # v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a  # v4
       - run: chmod +x fabric/gradlew
       - working-directory: fabric
         run: ./gradlew build --no-daemon
@@ -184,7 +184,7 @@ jobs:
         with:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
-      - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947  # v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a  # v4
       - run: chmod +x forge/gradlew
       - working-directory: forge
         run: ./gradlew build --no-daemon
@@ -205,7 +205,7 @@ jobs:
         with:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
-      - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947  # v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a  # v4
       - run: chmod +x neoforge/gradlew
       - working-directory: neoforge
         run: ./gradlew build --no-daemon
@@ -365,7 +365,7 @@ jobs:
 
       - name: Cache Forge server installation
         id: forge-server-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
         with:
           path: ~/forge-server-base
           key: forge-server-${{ hashFiles('gradle/libs.versions.toml') }}
@@ -445,7 +445,7 @@ jobs:
 
       - name: Cache NeoForge server installation
         id: neoforge-server-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
         with:
           path: ~/neoforge-server-base
           key: neoforge-server-${{ hashFiles('gradle/libs.versions.toml') }}
