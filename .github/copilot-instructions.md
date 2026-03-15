@@ -5,6 +5,84 @@
 
 ---
 
+## Development Workflow
+
+### Task Size Gating — Plan Before Acting
+
+Assess scope before touching any workflow file:
+
+**Always plan first when ANY of these are true:**
+- Adding a new workflow file or removing an existing one
+- Adding/removing/renaming an input or output (affects all callers)
+- Task requires changes to more than one workflow file
+- The request is ambiguous — e.g. "improve performance" without specifics
+
+**Planning steps:**
+1. Use `explore` agent to read the relevant workflow(s) and understand current structure
+2. Write a plan to the session plan file; track todos in the SQL `todos` table
+3. Confirm with the user before writing YAML
+
+**Start directly (no plan needed):**
+- Single-step bug fix (e.g. fix a shell quoting issue)
+- Action SHA/version bump (`chore(deps):`)
+- Documentation update (README, comments)
+
+---
+
+### Sub-Agent Dispatch — One Agent Per Lifecycle Phase
+
+| Phase | Agent type | Example use |
+|---|---|---|
+| **Explore** | `explore` | "How does the NeoForge build step work? What inputs does it use?" |
+| **Implement** | `general-purpose` | Multi-workflow edits; new job/step logic; complex shell scripts |
+| **Validate** | `task` | Push to develop branch → wait for `validate.yml` (actionlint) to pass |
+| **Code review** | `code-review` | Review staged YAML before committing; catches shellcheck issues early |
+
+**Parallelise:** Run multiple `explore` agents in one response for independent workflow questions. Never re-read what `explore` already returned.
+
+**Always validate before merging to main** — `validate.yml` runs actionlint + SHA-pin check automatically on push to develop.
+
+---
+
+### Reference Consistency Check
+
+**After every change — before committing — scan for stale references.**
+
+Any time you rename, move, or change a workflow name, input, output, or documented behaviour, grep for it everywhere:
+
+```bash
+# Find all references to a renamed file, input, or concept
+grep -r "old-name" . --include="*.md" --include="*.yml"
+```
+
+Things to check after common change types:
+
+- **Workflow renamed** → grep old name in `README.md`, `CONTRIBUTING.md`, this file, issue templates, and caller workflows in consumer projects
+- **Input added/renamed/removed** → update `README.md` inputs table; check existing callers
+- **New workflow added** → update this file's **Files** section, `README.md`, `CONTRIBUTING.md`, issue templates
+- **self-cd.yml versioning logic changed** → check `README.md` versioning section and this file's **Versioning Strategy**
+
+**Fix every stale reference in the same commit as the original change.** A rename with dangling references is an incomplete commit.
+
+---
+
+### Workflow-Specific "TDD"
+
+This repo has no unit tests, but actionlint acts as the test suite. Follow this cycle:
+
+1. **Specify** the expected behaviour in a comment or plan — what should the new step/job do?
+2. **Write** the YAML change
+3. **Self-check** with `code-review` agent before pushing — catches SC2086, SC2034, [expression] issues
+4. **Push to develop** → `task` agent monitors `validate.yml` run
+5. Fix any actionlint failures in a follow-up commit to develop
+6. **Merge to main** only when validate passes
+
+For new inputs: document the input in `README.md` inputs table *before* implementing the YAML, so the spec is clear.
+
+---
+
+
+
 ## Project Overview
 
 A collection of reusable GitHub Actions [`workflow_call`](https://docs.github.com/en/actions/sharing-automations/reusing-workflows) workflows for multi-platform Minecraft mods and plugins. Projects **call** these workflows rather than copy them, so improvements propagate automatically.
@@ -17,8 +95,10 @@ A collection of reusable GitHub Actions [`workflow_call`](https://docs.github.co
 
 ```
 .github/workflows/
-├── ci.yml       ← Reusable CI: check-changes → unit-tests → build-* → test-* → summary
-└── release.yml  ← Reusable release: versioning → build → integration-tests → GitHub Release → Modrinth
+├── ci.yml          ← Reusable CI: check-changes → unit-tests → build-* → test-* → summary
+├── cd.yml          ← Reusable release: versioning → build → integration-tests → GitHub Release → Modrinth
+├── validate.yml    ← Toolkit's own CI: actionlint + SHA-pin check on push/PR to develop/main
+└── self-cd.yml     ← Toolkit's own release: semantic versioning → GitHub Release + floating tag
 ```
 
 There is **no application code** in this repository — only workflow YAML files.
@@ -84,6 +164,8 @@ Since this repo contains only workflow YAML, test by:
 1. Point a test project's caller to your branch:
    ```yaml
    uses: dodoflix/mc-multiplatform-toolkit/.github/workflows/ci.yml@your-branch
+   # or for cd.yml:
+   uses: dodoflix/mc-multiplatform-toolkit/.github/workflows/cd.yml@your-branch
    ```
 2. Trigger a run on the test project (push a commit or `workflow_dispatch`)
 3. Verify all jobs complete as expected
