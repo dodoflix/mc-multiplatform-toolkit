@@ -23,8 +23,19 @@ jobs:
       - name: Compute next version
         id: version
         run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "Last tag: $LAST_TAG"
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "Last tag: ${LAST_TAG:-none}"
+
+          if [ -z "$LAST_TAG" ]; then
+            # First release ever — always publish as v1.0.0
+            {
+              echo "skip=false"
+              echo "version=1.0.0"
+              echo "tag=v1.0.0"
+              echo "major=v1"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           MAJOR=$(echo "$LAST_TAG" | sed 's/v//' | cut -d. -f1)
           MINOR=$(echo "$LAST_TAG" | sed 's/v//' | cut -d. -f2)
@@ -71,8 +82,12 @@ jobs:
         id: notes
         if: steps.version.outputs.skip != 'true'
         run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          NOTES=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s" | head -50)
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            NOTES=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s" | head -50)
+          else
+            NOTES=$(git log HEAD --pretty=format:"- %s" | head -50)
+          fi
           # Escape for GitHub output (multiline)
           {
             echo "notes<<EOF"
