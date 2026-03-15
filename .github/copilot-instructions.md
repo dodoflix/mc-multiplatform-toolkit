@@ -5,6 +5,60 @@
 
 ---
 
+## Development Workflow
+
+### Task Size Gating — Plan Before Acting
+
+Assess scope before touching any workflow file:
+
+**Always plan first when ANY of these are true:**
+- Adding a new workflow file or removing an existing one
+- Adding/removing/renaming an input or output (affects all callers)
+- Task requires changes to more than one workflow file
+- The request is ambiguous — e.g. "improve performance" without specifics
+
+**Planning steps:**
+1. Use `explore` agent to read the relevant workflow(s) and understand current structure
+2. Write a plan to the session plan file; track todos in the SQL `todos` table
+3. Confirm with the user before writing YAML
+
+**Start directly (no plan needed):**
+- Single-step bug fix (e.g. fix a shell quoting issue)
+- Action SHA/version bump (`chore(deps):`)
+- Documentation update (README, comments)
+
+---
+
+### Sub-Agent Dispatch — One Agent Per Lifecycle Phase
+
+| Phase | Agent type | Example use |
+|---|---|---|
+| **Explore** | `explore` | "How does the NeoForge build step work? What inputs does it use?" |
+| **Implement** | `general-purpose` | Multi-workflow edits; new job/step logic; complex shell scripts |
+| **Validate** | `task` | Push to develop branch → wait for `validate.yml` (actionlint) to pass |
+| **Code review** | `code-review` | Review staged YAML before committing; catches shellcheck issues early |
+
+**Parallelise:** Run multiple `explore` agents in one response for independent workflow questions. Never re-read what `explore` already returned.
+
+**Always validate before merging to main** — `validate.yml` runs actionlint + SHA-pin check automatically on push to develop.
+
+---
+
+### Workflow-Specific "TDD"
+
+This repo has no unit tests, but actionlint acts as the test suite. Follow this cycle:
+
+1. **Specify** the expected behaviour in a comment or plan — what should the new step/job do?
+2. **Write** the YAML change
+3. **Self-check** with `code-review` agent before pushing — catches SC2086, SC2034, [expression] issues
+4. **Push to develop** → `task` agent monitors `validate.yml` run
+5. Fix any actionlint failures in a follow-up commit to develop
+6. **Merge to main** only when validate passes
+
+For new inputs: document the input in `README.md` inputs table *before* implementing the YAML, so the spec is clear.
+
+---
+
 ## File Sync Rules
 
 When any of the files below are updated, you **must** also update all listed dependents in the same commit:
