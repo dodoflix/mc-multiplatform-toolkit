@@ -263,7 +263,7 @@ jobs:
           cd test-server
           java -Xmx1G -jar paper.jar --nogui &
           SERVER_PID=$!
-          for i in {1..120}; do
+          for _ in {1..120}; do
             if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log; exit 1; fi
             sleep 1
@@ -273,8 +273,8 @@ jobs:
           else
             echo "❌ Plugin failed to load!"; cat logs/latest.log; exit 1
           fi
-          grep -qiE "(ERROR|SEVERE).*$MOD_NAME" logs/latest.log && { echo "❌ Plugin has errors!"; exit 1; } || true
-          grep -qi "Could not load.*$MOD_NAME\|failed to load.*$MOD_NAME" logs/latest.log && { echo "❌ Plugin failed to load!"; exit 1; } || true
+          if grep -qiE "(ERROR|SEVERE).*$MOD_NAME" logs/latest.log; then echo "❌ Plugin has errors!"; exit 1; fi
+          if grep -qi "Could not load.*$MOD_NAME\|failed to load.*$MOD_NAME" logs/latest.log; then echo "❌ Plugin failed to load!"; exit 1; fi
           kill $SERVER_PID 2>/dev/null || true
           echo "✅ Bukkit integration test passed!"
 
@@ -310,7 +310,7 @@ jobs:
           mkdir -p test-server/mods
           MC_VERSION=$(grep -E '^minecraft = "[0-9]' gradle/libs.versions.toml | cut -d'"' -f2)
           curl -o fabric-installer.jar "https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.0.1/fabric-installer-1.0.1.jar"
-          java -jar fabric-installer.jar server -mcversion $MC_VERSION -dir test-server -downloadMinecraft
+          java -jar fabric-installer.jar server -mcversion "$MC_VERSION" -dir test-server -downloadMinecraft
           FABRIC_API_URL=$(curl -s "https://api.modrinth.com/v2/project/fabric-api/version?game_versions=%5B%22${MC_VERSION}%22%5D&loaders=%5B%22fabric%22%5D" | jq -r '.[0].files[0].url')
           if [ -n "$FABRIC_API_URL" ] && [ "$FABRIC_API_URL" != "null" ]; then
             curl -L -o test-server/mods/fabric-api.jar "$FABRIC_API_URL"
@@ -327,12 +327,12 @@ jobs:
           cd test-server
           java -Xmx1G -jar fabric-server-launch.jar --nogui &
           SERVER_PID=$!
-          for i in {1..120}; do
+          for _ in {1..120}; do
             if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log; exit 1; fi
             sleep 1
           done
-          grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log && { echo "❌ Mod has errors!"; exit 1; } || true
+          if grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log; then echo "❌ Mod has errors!"; exit 1; fi
           kill $SERVER_PID 2>/dev/null || true
           echo "✅ Fabric integration test passed!"
 
@@ -407,12 +407,12 @@ jobs:
             fi
           fi
           SERVER_PID=$!
-          for i in {1..150}; do
+          for _ in {1..150}; do
             if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null || cat logs/debug.log 2>/dev/null; exit 1; fi
             sleep 1
           done
-          grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log 2>/dev/null && { echo "❌ Mod has errors!"; exit 1; } || true
+          if grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log 2>/dev/null; then echo "❌ Mod has errors!"; exit 1; fi
           kill $SERVER_PID 2>/dev/null || true
           echo "✅ Forge integration test passed!"
 
@@ -479,12 +479,12 @@ jobs:
             java -Xmx2G @user_jvm_args.txt @libraries/net/neoforged/neoforge/*/unix_args.txt --nogui &
           fi
           SERVER_PID=$!
-          for i in {1..180}; do
+          for _ in {1..180}; do
             if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null; exit 1; fi
             sleep 1
           done
-          grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log 2>/dev/null && { echo "❌ Mod has errors!"; exit 1; } || true
+          if grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log 2>/dev/null; then echo "❌ Mod has errors!"; exit 1; fi
           kill $SERVER_PID 2>/dev/null || true
           echo "✅ NeoForge integration test passed!"
 
@@ -519,35 +519,43 @@ jobs:
         run: |
           status() { case "$1" in success) echo "✅ Passed" ;; skipped) echo "⏭️ Skipped" ;; *) echo "❌ Failed ($1)" ;; esac; }
 
-          echo "## 🏗️ CI Results" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## 🏗️ CI Results"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$SHOULD_TEST" != "true" ]; then
             echo "⏭️ Skipped — no relevant code changes." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          echo "| Job | Status |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|-----|--------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Unit Tests       | $(status "$RESULT_UNIT") |"     >> "$GITHUB_STEP_SUMMARY"
-          echo "| Bukkit Build     | $(status "$RESULT_BUKKIT") |"   >> "$GITHUB_STEP_SUMMARY"
-          echo "| Fabric Build     | $(status "$RESULT_FABRIC") |"   >> "$GITHUB_STEP_SUMMARY"
-          echo "| Forge Build      | $(status "$RESULT_FORGE") |"    >> "$GITHUB_STEP_SUMMARY"
-          echo "| NeoForge Build   | $(status "$RESULT_NEOFORGE") |" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "| Job | Status |"
+            echo "|-----|--------|"
+            echo "| Unit Tests       | $(status "$RESULT_UNIT") |"
+            echo "| Bukkit Build     | $(status "$RESULT_BUKKIT") |"
+            echo "| Fabric Build     | $(status "$RESULT_FABRIC") |"
+            echo "| Forge Build      | $(status "$RESULT_FORGE") |"
+            echo "| NeoForge Build   | $(status "$RESULT_NEOFORGE") |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "### Integration Tests" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Platform | Status |" >> "$GITHUB_STEP_SUMMARY"
-            echo "|----------|--------|" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Bukkit/Paper | $(status "$RESULT_T_BUKKIT") |"   >> "$GITHUB_STEP_SUMMARY"
-            echo "| Fabric       | $(status "$RESULT_T_FABRIC") |"   >> "$GITHUB_STEP_SUMMARY"
-            echo "| Forge        | $(status "$RESULT_T_FORGE") |"    >> "$GITHUB_STEP_SUMMARY"
-            echo "| NeoForge     | $(status "$RESULT_T_NEOFORGE") |" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo ""
+              echo "### Integration Tests"
+              echo "| Platform | Status |"
+              echo "|----------|--------|"
+              echo "| Bukkit/Paper | $(status "$RESULT_T_BUKKIT") |"
+              echo "| Fabric       | $(status "$RESULT_T_FABRIC") |"
+              echo "| Forge        | $(status "$RESULT_T_FORGE") |"
+              echo "| NeoForge     | $(status "$RESULT_T_NEOFORGE") |"
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "> 📦 Build artifacts available in the Actions artifacts section." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo ""
+            echo "> 📦 Build artifacts available in the Actions artifacts section."
+          } >> "$GITHUB_STEP_SUMMARY"
 
           for result in "$RESULT_UNIT" "$RESULT_BUKKIT" "$RESULT_FABRIC" "$RESULT_FORGE" "$RESULT_NEOFORGE" \
                         "$RESULT_T_BUKKIT" "$RESULT_T_FABRIC" "$RESULT_T_FORGE" "$RESULT_T_NEOFORGE"; do
