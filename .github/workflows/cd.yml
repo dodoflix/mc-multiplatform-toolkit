@@ -101,13 +101,13 @@ jobs:
         run: |
           if [[ "${{ github.event.head_commit.message }}" == *"[skip ci]"* ]]; then
             echo "⏭️ Skipping due to [skip ci]"
-            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           if [[ "${{ github.event.head_commit.message }}" == *"[force deploy]"* ]]; then
             echo "✅ Force deploy requested"
-            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -135,7 +135,7 @@ jobs:
             fi
           done <<< "$CHANGED_FILES"
 
-          echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
+          echo "should_deploy=$SHOULD_DEPLOY" >> "$GITHUB_OUTPUT"
           echo "Should deploy: $SHOULD_DEPLOY"
 
       - name: Determine release type
@@ -143,10 +143,10 @@ jobs:
         run: |
           BRANCH="${GITHUB_REF#refs/heads/}"
           if [ "$BRANCH" = "${{ inputs.production-branch }}" ]; then
-            echo "is_production=true" >> $GITHUB_OUTPUT
+            echo "is_production=true" >> "$GITHUB_OUTPUT"
             echo "📦 Production Release"
           else
-            echo "is_production=false" >> $GITHUB_OUTPUT
+            echo "is_production=false" >> "$GITHUB_OUTPUT"
             echo "🔧 Development Build"
           fi
 
@@ -163,7 +163,7 @@ jobs:
             VERSION=$(grep "^modVersion=" gradle.properties | cut -d'=' -f2 | tr -d '\r\n' | sed 's/-dev.*//g' | sed 's/-SNAPSHOT//g')
             [ -z "$VERSION" ] && VERSION="0.0.0"
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Current version (from last tag): $VERSION"
 
       - name: Determine version bump from commits
@@ -182,7 +182,7 @@ jobs:
           elif echo "$COMMITS" | grep -qiE "^(feat|feature)(\(.*\))?:"; then
             BUMP_TYPE="minor"
           fi
-          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
 
       - name: Calculate new version
         id: new_version
@@ -205,7 +205,7 @@ jobs:
             NEW_VERSION="${CURRENT}-dev.${COMMIT_COUNT}"
           fi
 
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "New version: $NEW_VERSION"
 
   # ─── Build all platforms ──────────────────────────────────────────────────
@@ -226,10 +226,10 @@ jobs:
       - name: Grant execute permission
         run: |
           chmod +x gradlew
-          [ -f bukkit/gradlew ]   && chmod +x bukkit/gradlew   || true
-          [ -f fabric/gradlew ]   && chmod +x fabric/gradlew   || true
-          [ -f forge/gradlew ]    && chmod +x forge/gradlew    || true
-          [ -f neoforge/gradlew ] && chmod +x neoforge/gradlew || true
+          if [ -f bukkit/gradlew ];   then chmod +x bukkit/gradlew;   fi
+          if [ -f fabric/gradlew ];   then chmod +x fabric/gradlew;   fi
+          if [ -f forge/gradlew ];    then chmod +x forge/gradlew;    fi
+          if [ -f neoforge/gradlew ]; then chmod +x neoforge/gradlew; fi
 
       - name: Run common unit tests
         run: ./gradlew :common:test --no-daemon -PmodVersion=${{ needs.check-changes.outputs.new_version }}
@@ -411,7 +411,7 @@ jobs:
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null; exit 1; fi
             sleep 1
           done
-          grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log && { echo "❌ Mod has errors!"; exit 1; } || true
+          if grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log; then echo "❌ Mod has errors!"; exit 1; fi
           kill $SERVER_PID 2>/dev/null || true
           echo "✅ Fabric integration test passed!"
 
@@ -488,7 +488,7 @@ jobs:
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null || cat logs/debug.log 2>/dev/null; exit 1; fi
             sleep 1
           done
-          grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log 2>/dev/null && { echo "❌ Mod has errors!"; exit 1; } || true
+          if grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log 2>/dev/null; then echo "❌ Mod has errors!"; exit 1; fi
           kill $SERVER_PID 2>/dev/null || true
           echo "✅ Forge integration test passed!"
 
@@ -557,7 +557,7 @@ jobs:
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null; exit 1; fi
             sleep 1
           done
-          grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log 2>/dev/null && { echo "❌ Mod has errors!"; exit 1; } || true
+          if grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log 2>/dev/null; then echo "❌ Mod has errors!"; exit 1; fi
           kill $SERVER_PID 2>/dev/null || true
           echo "✅ NeoForge integration test passed!"
 
@@ -621,10 +621,10 @@ jobs:
           [ "$FIX_COUNT" -gt 0 ] && SUMMARY="${SUMMARY}${FIX_COUNT} bug fix(es)"
           [ -z "$SUMMARY" ] && SUMMARY="Maintenance update"
 
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
+          echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
+          echo -e "$CHANGELOG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "summary=$SUMMARY" >> "$GITHUB_OUTPUT"
 
       - name: Collect release artifacts
         env:
