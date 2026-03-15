@@ -95,13 +95,27 @@ A collection of reusable GitHub Actions [`workflow_call`](https://docs.github.co
 
 ```
 .github/workflows/
-├── ci.yml          ← Reusable CI: check-changes → unit-tests → build-* → test-* → summary
+├── ci.yml          ← Reusable CI: check-changes → unit-tests → build-* → test-* → Codecov upload → summary
 ├── cd.yml          ← Reusable release: versioning → build → integration-tests → GitHub Release → Modrinth
 ├── validate.yml    ← Toolkit's own CI: actionlint + SHA-pin check on push/PR to develop/main
-└── self-cd.yml     ← Toolkit's own release: semantic versioning → GitHub Release + floating tag
+└── self-cd.yml     ← Toolkit's own release: triggered by validate passing on main
 ```
 
 There is **no application code** in this repository — only workflow YAML files.
+
+---
+
+## Codecov Integration
+
+`ci.yml` uploads JaCoCo XML coverage reports to Codecov after unit tests complete.
+
+- Controlled by `upload-coverage` boolean input (default: `true`)
+- Requires `CODECOV_TOKEN` repository secret in the **caller** repo — pass via `secrets: inherit`
+- `fail_ci_if_error: false` — CI never fails if the token is missing or Codecov is down
+- Path glob: `**/build/reports/jacoco/test/jacocoTestReport.xml` and `**/build/reports/jacoco/jacocoTestReport.xml`
+- Action pinned to commit SHA: `codecov/codecov-action@<sha>  # v5`
+
+Callers must have `codecov.yml` in their repo root to configure coverage targets (optional but recommended).
 
 ---
 
@@ -133,7 +147,8 @@ There is **no application code** in this repository — only workflow YAML files
 1. Add it to the workflow's `on.workflow_call.inputs:` block with `description:`, `type:`, and `default:` (if optional)
 2. Consume it via `${{ inputs.input-name }}` in job steps
 3. Document it in `README.md` inputs reference table
-4. If breaking (removes or renames existing input), add `BREAKING CHANGE:` footer to commit
+4. Document it in `copilot-instructions.md` if it affects Codecov, CI gating, or other cross-cutting concerns
+5. If breaking (removes or renames existing input), add `BREAKING CHANGE:` footer to commit
 
 ---
 
