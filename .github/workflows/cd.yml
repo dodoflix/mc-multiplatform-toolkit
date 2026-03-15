@@ -1,4 +1,4 @@
-name: Release (Reusable)
+name: CD (Reusable)
 
 on:
   workflow_call:
@@ -98,16 +98,18 @@ jobs:
 
       - name: Check for plugin file changes
         id: changes
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          if [[ "${{ github.event.head_commit.message }}" == *"[skip ci]"* ]]; then
+          if [[ "$COMMIT_MSG" == *"[skip ci]"* ]]; then
             echo "⏭️ Skipping due to [skip ci]"
-            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if [[ "${{ github.event.head_commit.message }}" == *"[force deploy]"* ]]; then
+          if [[ "$COMMIT_MSG" == *"[force deploy]"* ]]; then
             echo "✅ Force deploy requested"
-            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -135,7 +137,7 @@ jobs:
             fi
           done <<< "$CHANGED_FILES"
 
-          echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
+          echo "should_deploy=$SHOULD_DEPLOY" >> "$GITHUB_OUTPUT"
           echo "Should deploy: $SHOULD_DEPLOY"
 
       - name: Determine release type
@@ -143,10 +145,10 @@ jobs:
         run: |
           BRANCH="${GITHUB_REF#refs/heads/}"
           if [ "$BRANCH" = "${{ inputs.production-branch }}" ]; then
-            echo "is_production=true" >> $GITHUB_OUTPUT
+            echo "is_production=true" >> "$GITHUB_OUTPUT"
             echo "📦 Production Release"
           else
-            echo "is_production=false" >> $GITHUB_OUTPUT
+            echo "is_production=false" >> "$GITHUB_OUTPUT"
             echo "🔧 Development Build"
           fi
 
@@ -163,7 +165,7 @@ jobs:
             VERSION=$(grep "^modVersion=" gradle.properties | cut -d'=' -f2 | tr -d '\r\n' | sed 's/-dev.*//g' | sed 's/-SNAPSHOT//g')
             [ -z "$VERSION" ] && VERSION="0.0.0"
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Current version (from last tag): $VERSION"
 
       - name: Determine version bump from commits
@@ -173,7 +175,7 @@ jobs:
           if [ -z "$LAST_TAG" ]; then
             COMMITS=$(git log --pretty=format:"%s" --no-merges)
           else
-            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" --no-merges)
+            COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s" --no-merges)
           fi
 
           BUMP_TYPE="patch"
@@ -182,7 +184,7 @@ jobs:
           elif echo "$COMMITS" | grep -qiE "^(feat|feature)(\(.*\))?:"; then
             BUMP_TYPE="minor"
           fi
-          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+          echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
 
       - name: Calculate new version
         id: new_version
@@ -205,7 +207,7 @@ jobs:
             NEW_VERSION="${CURRENT}-dev.${COMMIT_COUNT}"
           fi
 
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "New version: $NEW_VERSION"
 
   # ─── Build all platforms ──────────────────────────────────────────────────
@@ -226,10 +228,10 @@ jobs:
       - name: Grant execute permission
         run: |
           chmod +x gradlew
-          [ -f bukkit/gradlew ]   && chmod +x bukkit/gradlew   || true
-          [ -f fabric/gradlew ]   && chmod +x fabric/gradlew   || true
-          [ -f forge/gradlew ]    && chmod +x forge/gradlew    || true
-          [ -f neoforge/gradlew ] && chmod +x neoforge/gradlew || true
+          if [ -f bukkit/gradlew ];   then chmod +x bukkit/gradlew;   fi
+          if [ -f fabric/gradlew ];   then chmod +x fabric/gradlew;   fi
+          if [ -f forge/gradlew ];    then chmod +x forge/gradlew;    fi
+          if [ -f neoforge/gradlew ]; then chmod +x neoforge/gradlew; fi
 
       - name: Run common unit tests
         run: ./gradlew :common:test --no-daemon -PmodVersion=${{ needs.check-changes.outputs.new_version }}
@@ -344,7 +346,7 @@ jobs:
           cd test-server
           java -Xmx1G -jar paper.jar --nogui &
           SERVER_PID=$!
-          for i in {1..90}; do
+          for _ in {1..90}; do
             if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null; exit 1; fi
             sleep 1
@@ -389,7 +391,7 @@ jobs:
           mkdir -p test-server/mods
           MC_VERSION=$(grep -E '^minecraft = "[0-9]' gradle/libs.versions.toml | cut -d'"' -f2)
           curl -o fabric-installer.jar "https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.0.1/fabric-installer-1.0.1.jar"
-          java -jar fabric-installer.jar server -mcversion $MC_VERSION -dir test-server -downloadMinecraft
+          java -jar fabric-installer.jar server -mcversion "$MC_VERSION" -dir test-server -downloadMinecraft
           FABRIC_API_URL=$(curl -s "https://api.modrinth.com/v2/project/fabric-api/version?game_versions=%5B%22${MC_VERSION}%22%5D&loaders=%5B%22fabric%22%5D" | jq -r '.[0].files[0].url')
           if [ -n "$FABRIC_API_URL" ] && [ "$FABRIC_API_URL" != "null" ]; then
             curl -L -o test-server/mods/fabric-api.jar "$FABRIC_API_URL"
@@ -406,12 +408,12 @@ jobs:
           cd test-server
           java -Xmx1G -jar fabric-server-launch.jar --nogui &
           SERVER_PID=$!
-          for i in {1..90}; do
+          for _ in {1..90}; do
             if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null; exit 1; fi
             sleep 1
           done
-          grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log && { echo "❌ Mod has errors!"; exit 1; } || true
+          if grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log; then echo "❌ Mod has errors!"; exit 1; fi
           kill $SERVER_PID 2>/dev/null || true
           echo "✅ Fabric integration test passed!"
 
@@ -483,12 +485,12 @@ jobs:
             fi
           fi
           SERVER_PID=$!
-          for i in {1..150}; do
+          for _ in {1..150}; do
             if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null || cat logs/debug.log 2>/dev/null; exit 1; fi
             sleep 1
           done
-          grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log 2>/dev/null && { echo "❌ Mod has errors!"; exit 1; } || true
+          if grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log 2>/dev/null; then echo "❌ Mod has errors!"; exit 1; fi
           kill $SERVER_PID 2>/dev/null || true
           echo "✅ Forge integration test passed!"
 
@@ -552,12 +554,12 @@ jobs:
             java -Xmx2G @user_jvm_args.txt @libraries/net/neoforged/neoforge/*/unix_args.txt --nogui &
           fi
           SERVER_PID=$!
-          for i in {1..150}; do
+          for _ in {1..150}; do
             if grep -q "Done" logs/latest.log 2>/dev/null; then echo "✅ Server started!"; break; fi
             if ! kill -0 $SERVER_PID 2>/dev/null; then echo "❌ Server crashed!"; cat logs/latest.log 2>/dev/null; exit 1; fi
             sleep 1
           done
-          grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log 2>/dev/null && { echo "❌ Mod has errors!"; exit 1; } || true
+          if grep -qiE "(ERROR|FATAL).*$MOD_ID" logs/latest.log 2>/dev/null; then echo "❌ Mod has errors!"; exit 1; fi
           kill $SERVER_PID 2>/dev/null || true
           echo "✅ NeoForge integration test passed!"
 
@@ -593,7 +595,7 @@ jobs:
           if [ -z "$LAST_TAG" ]; then
             COMMITS=$(git log --pretty=format:"%s|%h" --no-merges -20)
           else
-            COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s|%h" --no-merges)
+            COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s|%h" --no-merges)
           fi
 
           FEATURES=""; FIXES=""; OTHER=""
@@ -621,10 +623,12 @@ jobs:
           [ "$FIX_COUNT" -gt 0 ] && SUMMARY="${SUMMARY}${FIX_COUNT} bug fix(es)"
           [ -z "$SUMMARY" ] && SUMMARY="Maintenance update"
 
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
+          {
+            echo "changelog<<EOF"
+            echo -e "$CHANGELOG"
+            echo "EOF"
+            echo "summary=$SUMMARY"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Collect release artifacts
         env:
@@ -668,20 +672,20 @@ jobs:
           sed -i "s/^modVersion=.*/modVersion=$NEW_VERSION/" gradle.properties
           git add gradle.properties
           git commit -m "chore: release v${NEW_VERSION} [skip ci]"
-          git push origin $PROD_BRANCH
+          git push origin "$PROD_BRANCH"
 
           # Sync version back to develop so dev builds always use the correct base.
-          git fetch origin $DEVELOP_BRANCH
-          git checkout -B $DEVELOP_BRANCH origin/$DEVELOP_BRANCH
+          git fetch origin "$DEVELOP_BRANCH"
+          git checkout -B "$DEVELOP_BRANCH" "origin/$DEVELOP_BRANCH"
           if git diff --quiet gradle.properties; then
             echo "$DEVELOP_BRANCH already has modVersion=$NEW_VERSION — no sync needed"
           else
             sed -i "s/^modVersion=.*/modVersion=$NEW_VERSION/" gradle.properties
             git add gradle.properties
             git commit -m "chore: sync version to v${NEW_VERSION} [skip ci]"
-            git push origin HEAD:$DEVELOP_BRANCH
+            git push origin "HEAD:$DEVELOP_BRANCH"
           fi
-          git checkout $PROD_BRANCH
+          git checkout "$PROD_BRANCH"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@26e8ad27a09a225049a7075d7ec1caa2df6ff332  # v2.6.0

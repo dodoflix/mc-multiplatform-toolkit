@@ -1,0 +1,54 @@
+name: Validate Workflows
+
+on:
+  push:
+    branches: [develop, 'feature/**', 'fix/**', 'chore/**']
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Lint GitHub Actions
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - name: Install actionlint
+        run: |
+          ACTIONLINT_VERSION="1.7.7"
+          curl -sfL \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz actionlint
+          sudo mv actionlint /usr/local/bin/
+
+      - name: Run actionlint
+        run: actionlint
+
+  check-pinned-actions:
+    name: Check All Actions Are SHA-Pinned
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+
+      - name: Detect unpinned action references
+        run: |
+          # Fail if any `uses:` line references an action by tag/branch instead of full SHA
+          # Allow: owner/action@<40-char hex SHA>
+          # Reject: owner/action@v1, owner/action@main, etc.
+          UNPINNED=$(grep -rn 'uses:' .github/workflows/ \
+            | grep -v '#' \
+            | grep -E 'uses: [a-zA-Z0-9_-]+/[a-zA-Z0-9_/-]+@[^0-9a-f]' \
+            | grep -v 'uses: \./') || true
+
+          if [ -n "$UNPINNED" ]; then
+            echo "❌ Found unpinned action references (use a full commit SHA):"
+            echo "$UNPINNED"
+            exit 1
+          fi
+
+          echo "✅ All action references are pinned to commit SHAs."
