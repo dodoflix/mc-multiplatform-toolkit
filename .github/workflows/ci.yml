@@ -138,7 +138,7 @@ jobs:
         run: ./gradlew test --no-daemon
       - name: Upload coverage to Codecov
         if: inputs.upload-coverage
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de  # v5
+        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v5
         with:
           files: |
             **/build/reports/jacoco/test/jacocoTestReport.xml
