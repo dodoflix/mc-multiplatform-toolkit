@@ -223,7 +223,7 @@ jobs:
         with:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
-      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c  # v5.0.2
+      - uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e  # v6.1.0
 
       - name: Grant execute permission
         run: |
@@ -263,7 +263,7 @@ jobs:
 
       - name: Upload Bukkit artifact
         if: inputs.run-bukkit
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: bukkit-jar
           path: bukkit/build/libs/*.jar
@@ -272,7 +272,7 @@ jobs:
 
       - name: Upload Fabric artifact
         if: inputs.run-fabric
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: fabric-jar
           path: fabric/build/libs/*.jar
@@ -281,7 +281,7 @@ jobs:
 
       - name: Upload Forge artifact
         if: inputs.run-forge
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: forge-jar
           path: forge/build/libs/*.jar
@@ -290,7 +290,7 @@ jobs:
 
       - name: Upload NeoForge artifact
         if: inputs.run-neoforge
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: neoforge-jar
           path: neoforge/build/libs/*.jar
@@ -299,7 +299,7 @@ jobs:
 
       - name: Upload test results on failure
         if: failure()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: test-results
           path: '**/build/reports/tests/'
@@ -364,7 +364,7 @@ jobs:
 
       - name: Upload logs on failure
         if: failure()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: paper-logs
           path: test-server/logs/
@@ -419,7 +419,7 @@ jobs:
 
       - name: Upload logs on failure
         if: failure()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: fabric-logs
           path: test-server/logs/
@@ -443,7 +443,7 @@ jobs:
 
       - name: Cache Forge server installation
         id: forge-server-cache
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         with:
           path: ~/forge-server-base
           key: forge-server-${{ hashFiles('gradle/libs.versions.toml') }}
@@ -496,7 +496,7 @@ jobs:
 
       - name: Upload logs on failure
         if: failure()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: forge-logs
           path: test-server/logs/
@@ -520,7 +520,7 @@ jobs:
 
       - name: Cache NeoForge server installation
         id: neoforge-server-cache
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         with:
           path: ~/neoforge-server-base
           key: neoforge-server-${{ hashFiles('gradle/libs.versions.toml') }}
@@ -565,7 +565,7 @@ jobs:
 
       - name: Upload logs on failure
         if: failure()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: neoforge-logs
           path: test-server/logs/
